@@ -1,203 +1,119 @@
 # Libraries
 import streamlit as st
 import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
-import plotly.subplots as sp
-import data
+from PIL import Image
+issues=["abortion","gun_control", "climate_change",  "immigration", "healthcare"]
+checked=[]
+party=''
+st.set_page_config(
+    page_icon="📈",
+    layout="wide",)
+DATA_URL='https://raw.githubusercontent.com/ramseybe/hackathon_campaign/main/50_toss_up1.csv'
+st.header("Make a Difference This Election!", )
+left_column, right_column = st.columns([3,5])
 
-# Global Variables
-theme_plotly = None # None or streamlit
-week_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+@st.cache
+def load_data(file):
+    data = pd.read_csv(file)
+    data=data.drop(["Unnamed: 0"],axis=1)
+    dict = data.to_dict()
+    return dict
 
-# Config
-st.set_page_config(page_title='Macro - Cross Chain Monitoring', page_icon=':bar_chart:', layout='wide')
+thing = load_data(DATA_URL)
+for key, val in thing.items():
+    needed = val
+    break
 
-# Title
-st.title('Federal')
 
-# Style
-with open('style.css')as f:
-    st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html = True)
+def checkbox_container(data):
+    st.subheader('Check the important issues to you:')
+    for i in data:
+        st.checkbox(i.replace("_"," "), key='dynamic_checkbox_' + i)
 
-# Data Sources
-transactions_overview = data.get_data('Transactions Overview')
-transactions_daily = data.get_data('Transactions Daily')
-transactions_heatmap = data.get_data('Transactions Heatmap')
-transactions_new_users = data.get_data('New Users Daily')
+def get_selected_checkboxes():
+    return [i.replace('dynamic_checkbox_','') for i in st.session_state.keys() if i.startswith('dynamic_checkbox_') and st.session_state[i]]
 
-# Filter
-options = st.multiselect(
-    '**Select your desired blockchains:**',
-    options=transactions_overview['Blockchain'].unique(),
-    default=transactions_overview['Blockchain'].unique(),
-    key='macro_options'
-)
+def checked_to_list(data):
+    for i in data.columns():
+        st.write(i)
+with left_column:
+    checkbox_container(issues)
+    # st.write('You selected:')
+    # st.write(get_selected_checkboxes())
 
-# Selected Blockchain
-if len(options) == 0:
-    st.warning('Please select at least one blockchain to see the metrics.')
+checked = get_selected_checkboxes()
 
-# Single Chain Analysis
-elif len(options) == 1:
-    st.subheader('Overview')
-    df = transactions_overview.query("Blockchain == @options")
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.metric(label='**Total Blocks**', value=str(df['Blocks'].map('{:,.0f}'.format).values[0]))
-        st.metric(label='**Average Transactions/Block**', value=str(df['Transactions/Block'].map('{:,.0f}'.format).values[0]))
-    with c2:
-        st.metric(label='**Total Transactions**', value=str(df['Transactions'].map('{:,.0f}'.format).values[0]))
-        st.metric(label='**Average TPS**', value=str(df['TPS'].map('{:,.2f}'.format).values[0]))
-    with c3:
-        st.metric(label='**Total Unique Addresses**', value=str(df['Users'].map('{:,.0f}'.format).values[0]))
-        st.metric(label='**Average Daily Active Users**', value=str((df['Users'] / 30).map('{:,.0f}'.format).values[0]))
-    
-    st.subheader('Activity Over Time')
-    df = transactions_daily.query("Blockchain == @options")
-    dfnu = transactions_new_users.query("Blockchain == @options")
-    
-    fig = sp.make_subplots(specs=[[{'secondary_y': True}]])
-    fig.add_trace(go.Bar(x=df['Date'], y=df['Transactions'], name='Transactions'), secondary_y=False)
-    fig.add_trace(go.Line(x=df['Date'], y=df['Blocks'], name='Blocks'), secondary_y=True)
-    fig.update_layout(title_text='Daily Transactions and Blocks')
-    fig.update_yaxes(title_text='Transactions', secondary_y=False)
-    fig.update_yaxes(title_text='Blocks', secondary_y=True)
-    st.plotly_chart(fig, use_container_width=True, theme=theme_plotly)
+# st.write(checked)
+def read_file():
+    data = pd.read_csv(DATA_URL)
+    data = data.drop(["Unnamed: 0"], axis=1)
+    data = data.sort_values(by=['percent'])
+    data['percent'].to_list()
+    new = []
+    for i in data['percent'].to_list():
+        new.append(abs(i - 50))
+    data['percent'] = new
 
-    fig = sp.make_subplots()
-    fig.add_trace(go.Bar(x=df['Date'], y=df['Users'], name='Active Users'))
-    fig.add_trace(go.Line(x=dfnu['Date'], y=dfnu['NewUsers'], name='New Users'))
-    fig.update_layout(title_text='Daily Active and New Addresses')
-    fig.update_yaxes(title_text='Users')
-    st.plotly_chart(fig, use_container_width=True, theme=theme_plotly)
+    return data
 
-    fig = sp.make_subplots(specs=[[{'secondary_y': True}]])
-    fig.add_trace(go.Bar(x=df['Date'], y=df['TPS'], name='TPS'), secondary_y=False)
-    fig.add_trace(go.Line(x=df['Date'], y=df['Transactions/Block'], name='Transactions/Block'), secondary_y=True)
-    fig.update_layout(title_text='Daily Average TPS and Transactions/Block')
-    fig.update_yaxes(title_text='Transactions/Second', secondary_y=False)
-    fig.update_yaxes(title_text='Transactions/Block', secondary_y=True)
-    st.plotly_chart(fig, use_container_width=True, theme=theme_plotly)
+def match(df,values):
+    match = {}
+    for index, row in df.iterrows():
+        diff = 0
+        for can_ideology, user_ideology in zip(row[4:].to_dict().values(), values):
+            diff += abs(int(can_ideology) - int(user_ideology))
+        match[index] = diff
+    sorted_match = dict(sorted(match.items(), key=lambda item: item[1]))
+    return list(sorted_match)[-6:]
 
-    st.subheader('Activity Heatmap')
-    df = transactions_heatmap.query('Blockchain == @options')
+if st.button('Submit'):
+    with right_column:
+        st.subheader('Candidates that best align with your views:')
+        with st.container():
+            data = read_file()
+            good=[]
+            for i in data.columns:
+                if i in checked:
+                    good.append(1)
+                else:
+                    good.append(0)
+            good=good[4:]
+            # st.write(good)
+            matches= match(data,good)
+            # st.write(matches)
 
-    fig = px.density_heatmap(df, x='Hour', y='Day', z='Transactions', histfunc='avg', title='Heatmap of Transactions', nbinsx=24)
-    fig.update_layout(legend_title=None, xaxis_title=None, yaxis_title=None, xaxis={'dtick': 1}, coloraxis_colorbar=dict(title='Transactions'))
-    fig.update_yaxes(categoryorder='array', categoryarray=week_days)
-    st.plotly_chart(fig, use_container_width=True, theme=theme_plotly)
+            newdf=data.loc[data.index[matches]]
+            for i,row in newdf.iterrows():
 
-    fig = px.density_heatmap(df, x='Hour', y='Day', z='Users', histfunc='avg', title='Heatmap of Active Addresses', nbinsx=24)
-    fig.update_layout(legend_title=None, xaxis_title=None, yaxis_title=None, xaxis={'dtick': 1}, coloraxis_colorbar=dict(title='Users'))
-    fig.update_yaxes(categoryorder='array', categoryarray=week_days)
-    st.plotly_chart(fig, use_container_width=True, theme=theme_plotly)
+                t=row['name']
+                t=t.replace(" ","_")
+                t=t.lower()
+                if row['party'] == 'R':
+                    party = 'Republican'
+                elif row['party'] == 'D':
+                    party = 'Democrat'
+                if t=='budzinski' or t=='daniels':
+                    image = Image.open(f'pages/can_pics/{t}.jpg')
+                    st.subheader(t.title()+', ' +party)
+                    st.subheader(row['district'])
+                    st.image(image)
 
-    fig = px.density_heatmap(df, x='Hour', y='Day', z='Blocks', histfunc='avg', title='Heatmap of Blocks', nbinsx=24)
-    fig.update_layout(legend_title=None, xaxis_title=None, yaxis_title=None, xaxis={'dtick': 1}, coloraxis_colorbar=dict(title='Blocks'))
-    fig.update_yaxes(categoryorder='array', categoryarray=week_days)
-    st.plotly_chart(fig, use_container_width=True, theme=theme_plotly)
+                else:
+                    image = Image.open(f'pages/can_pics/{t}.jpeg')
+#                     st.image(Image.open(f'can_pics/{t}.png'))
+                    st.subheader(t.title()+', '+ party)
+                    st.subheader(row['district'])
+                    st.image(image)
 
-# Cross Chain Comparison
-else:
-    st.subheader('Overview')
-    df = transactions_overview.query('Blockchain == @options')
-    c1, c2 = st.columns(2)
-    with c1:
-        fig = px.bar(df, x='Blockchain', y='Transactions', color='Blockchain', title='Total Transactions', log_y=True)
-        fig.update_layout(showlegend=False, xaxis_title=None, yaxis_title='Transactions', xaxis={'categoryorder':'total ascending'}, hovermode='x unified')
-        fig.update_traces(hovertemplate='%{y:,.0f}<extra></extra>')
-        st.plotly_chart(fig, use_container_width=True, theme=theme_plotly)
+                    
+                cls=['district', 'name', 'percent', 'party', 'abortion', 'gun_control', 'climate_change', 'gender_identity',
+                 'pro_marijuana', 'captial_punishment', 'fracking', 'defense_spending', 'immigration',
+                 'net_neutrality']
+                for j in cls:
+                    if row[j] == 1:
+                        b=j.replace("_"," ")
+                        st.write(f"Pro-{b.title()}", end=" ")
+                st.write(
+                    f"Click here to donate to their campaign [{t} campaign](http://www.script-o-rama.com/movie_scripts/a1/bee-movie-script-transcript-seinfeld.html)")
 
-        fig = px.bar(df, x='Blockchain', y='TPS', color='Blockchain', title='Average TPS', log_y=True)
-        fig.update_layout(showlegend=False, xaxis_title=None, yaxis_title='Transactions/Second', xaxis={'categoryorder':'total ascending'}, hovermode='x unified')
-        fig.update_traces(hovertemplate='%{y:,.0f}<extra></extra>')
-        st.plotly_chart(fig, use_container_width=True, theme=theme_plotly)
-    with c2:
-        fig = px.bar(df, x='Blockchain', y='Users', color='Blockchain', title='Total Active Addresses')
-        fig.update_layout(showlegend=False, xaxis_title=None, yaxis_title='Users', xaxis={'categoryorder':'total ascending'}, hovermode='x unified')
-        fig.update_traces(hovertemplate='%{y:,.0f}<extra></extra>')
-        st.plotly_chart(fig, use_container_width=True, theme=theme_plotly)
-
-        fig = px.bar(df, x='Blockchain', y='Blocks', color='Blockchain', title='Total Blocks')
-        fig.update_layout(showlegend=False, xaxis_title=None, yaxis_title='Blocks', xaxis={'categoryorder':'total ascending'}, hovermode='x unified')
-        fig.update_traces(hovertemplate='%{y:,.0f}<extra></extra>')
-        st.plotly_chart(fig, use_container_width=True, theme=theme_plotly)
-
-    st.subheader('Activity Over Time')
-    
-    df = transactions_daily.query('Blockchain == @options').sort_values(['Date', 'Transactions'], ascending=[False, False])
-    fig = px.line(df, x='Date', y='Transactions', color='Blockchain', custom_data=['Blockchain'], title='Daily Total Transactions', log_y=True)
-    fig.update_layout(legend_title=None, xaxis_title=None, yaxis_title='Transactions', hovermode='x unified')
-    fig.update_traces(hovertemplate='%{customdata}: %{y:,.0f}<extra></extra>')
-    st.plotly_chart(fig, use_container_width=True, theme=theme_plotly)
-
-    df = transactions_daily.query('Blockchain == @options').sort_values(['Date', 'Users'], ascending=[False, False])
-    fig = px.line(df, x='Date', y='Users', color='Blockchain', custom_data=['Blockchain'], title='Daily Active Users', log_y=True)
-    fig.update_layout(legend_title=None, xaxis_title=None, yaxis_title='Active Users', hovermode='x unified')
-    fig.update_traces(hovertemplate='%{customdata}: %{y:,.0f}<extra></extra>')
-    st.plotly_chart(fig, use_container_width=True, theme=theme_plotly)
-
-    df = transactions_new_users.query('Blockchain == @options').sort_values(['Date', 'NewUsers'], ascending=[False, False])
-    fig = px.line(df, x='Date', y='NewUsers', color='Blockchain', custom_data=['Blockchain'], title='Daily New Users', log_y=True)
-    fig.update_layout(legend_title=None, xaxis_title=None, yaxis_title='New Users', hovermode='x unified')
-    fig.update_traces(hovertemplate='%{customdata}: %{y:,.0f}<extra></extra>')
-    st.plotly_chart(fig, use_container_width=True, theme=theme_plotly)
-
-    df = transactions_daily.query('Blockchain == @options').sort_values(['Date', 'Blocks'], ascending=[False, False])
-    fig = px.line(df, x='Date', y='Blocks', color='Blockchain', custom_data=['Blockchain'], title='Daily Blocks', log_y=True)
-    fig.update_layout(legend_title=None, xaxis_title=None, yaxis_title='Blocks', hovermode='x unified')
-    fig.update_traces(hovertemplate='%{customdata}: %{y:,.0f}<extra></extra>')
-    st.plotly_chart(fig, use_container_width=True, theme=theme_plotly)
-
-    st.subheader('Activity Heatmap')
-
-    c1, c2 = st.columns(2)
-    with c1:
-        df = transactions_heatmap.query('Blockchain == @options')
-        df['Transactions'] = df.groupby('Blockchain')['Transactions'].transform(lambda x: (x - x.min()) / (x.max() - x.min()))
-        fig = px.density_heatmap(df, x='Blockchain', y='Day', z='Transactions', histfunc='avg', title='Daily Heatmap of Normalized Transactions')
-        fig.update_layout(legend_title=None, xaxis_title=None, yaxis_title=None, coloraxis_colorbar=dict(title='Min/Max'))
-        fig.update_xaxes(categoryorder='category ascending')
-        fig.update_yaxes(categoryorder='array', categoryarray=week_days)
-        st.plotly_chart(fig, use_container_width=True, theme=theme_plotly)
-        
-        df = transactions_heatmap.query('Blockchain == @options')
-        df['Users'] = df.groupby('Blockchain')['Users'].transform(lambda x: (x - x.min()) / (x.max() - x.min()))
-        fig = px.density_heatmap(df, x='Blockchain', y='Day', z='Users', histfunc='avg', title='Daily Heatmap of Normalized Users')
-        fig.update_layout(legend_title=None, xaxis_title=None, yaxis_title=None, coloraxis_colorbar=dict(title='Min/Max'))
-        fig.update_xaxes(categoryorder='category ascending')
-        fig.update_yaxes(categoryorder='array', categoryarray=week_days)
-        st.plotly_chart(fig, use_container_width=True, theme=theme_plotly)
-        
-        df = transactions_heatmap.query('Blockchain == @options')
-        df['Blocks'] = df.groupby('Blockchain')['Blocks'].transform(lambda x: (x - x.min()) / (x.max() - x.min()))
-        fig = px.density_heatmap(df, x='Blockchain', y='Day', z='Blocks', histfunc='avg', title='Daily Heatmap of Normalized Blocks')
-        fig.update_layout(legend_title=None, xaxis_title=None, yaxis_title=None, coloraxis_colorbar=dict(title='Min/Max'))
-        fig.update_xaxes(categoryorder='category ascending')
-        fig.update_yaxes(categoryorder='array', categoryarray=week_days)
-        st.plotly_chart(fig, use_container_width=True, theme=theme_plotly)
-    with c2:
-        df = transactions_heatmap.query('Blockchain == @options')
-        df['Transactions'] = df.groupby('Blockchain')['Transactions'].transform(lambda x: (x - x.min()) / (x.max() - x.min()))
-        fig = px.density_heatmap(df, x='Blockchain', y='Hour', z='Transactions', histfunc='avg', title='Hourly Heatmap of Normalized Transactions', nbinsy=24)
-        fig.update_layout(legend_title=None, xaxis_title=None, yaxis_title=None, coloraxis_colorbar=dict(title='Min/Max'))
-        fig.update_xaxes(categoryorder='category ascending')
-        fig.update_yaxes(categoryorder='array', categoryarray=week_days, dtick=2)
-        st.plotly_chart(fig, use_container_width=True, theme=theme_plotly)
-        
-        df = transactions_heatmap.query('Blockchain == @options')
-        df['Users'] = df.groupby('Blockchain')['Users'].transform(lambda x: (x - x.min()) / (x.max() - x.min()))
-        fig = px.density_heatmap(df, x='Blockchain', y='Hour', z='Users', histfunc='avg', title='Hourly Heatmap of Normalized Users', nbinsy=24)
-        fig.update_layout(legend_title=None, xaxis_title=None, yaxis_title=None, coloraxis_colorbar=dict(title='Min/Max'))
-        fig.update_xaxes(categoryorder='category ascending')
-        fig.update_yaxes(categoryorder='array', categoryarray=week_days, dtick=2)
-        st.plotly_chart(fig, use_container_width=True, theme=theme_plotly)
-        
-        df = transactions_heatmap.query('Blockchain == @options')
-        df['Blocks'] = df.groupby('Blockchain')['Blocks'].transform(lambda x: (x - x.min()) / (x.max() - x.min()))
-        fig = px.density_heatmap(df, x='Blockchain', y='Hour', z='Blocks', histfunc='avg', title='Hourly Heatmap of Normalized Blocks', nbinsy=24)
-        fig.update_layout(legend_title=None, xaxis_title=None, yaxis_title=None, coloraxis_colorbar=dict(title='Min/Max'))
-        fig.update_xaxes(categoryorder='category ascending')
-        fig.update_yaxes(categoryorder='array', categoryarray=week_days, dtick=2)
-        st.plotly_chart(fig, use_container_width=True, theme=theme_plotly)
+                # st.write("canidate url")
